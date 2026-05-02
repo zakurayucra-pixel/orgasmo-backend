@@ -1,6 +1,7 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 app.use(cors());
@@ -17,60 +18,40 @@ async function initDB() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS payments (
         id SERIAL PRIMARY KEY,
-        opcode TEXT UNIQUE NOT NULL,
+        opcode TEXT UNIQUE,
         username TEXT,
         product TEXT,
-        status TEXT DEFAULT 'pending',
+        status TEXT,
         licensekey TEXT,
         date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log('✅ Base de datos lista');
+    console.log("✅ Base de datos lista");
   } catch (e) {
-    console.error(e);
+    console.error("Error DB:", e);
   }
 }
 initDB();
 
-// Crear pago desde el programa
+// Rutas
 app.post('/api/payment', async (req, res) => {
   const { opcode, username, product } = req.body;
-  if (!opcode || !username) return res.status(400).json({success: false});
-
   try {
-    await pool.query(
-      'INSERT INTO payments (opcode, username, product) VALUES ($1, $2, $3)',
-      [opcode, username, product || 'General']
+    const result = await pool.query(
+      'INSERT INTO payments (opcode, username, product, status, licensekey) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [opcode, username, product, 'pending', '']
     );
     res.json({ success: true });
   } catch (e) {
-    res.status(400).json({ success: false, error: 'Código ya usado' });
+    res.status(400).json({ success: false, error: e.message });
   }
 });
 
-// Consultar licencia
-app.get('/api/check/:opcode', async (req, res) => {
-  const result = await pool.query('SELECT * FROM payments WHERE opcode = $1', [req.params.opcode]);
-  res.json(result.rows[0] || { error: "No encontrado" });
-});
-
-// Pagos pendientes para el admin
-app.get('/api/pending', async (req, res) => {
-  const result = await pool.query("SELECT * FROM payments WHERE status = 'pending'");
+app.get('/api/payments/pending', async (req, res) => {
+  const result = await pool.query("SELECT * FROM payments WHERE status = 'pending' ORDER BY date DESC");
   res.json(result.rows);
 });
 
-// Aprobar pago
-app.post('/api/approve', async (req, res) => {
-  const { opcode, licensekey } = req.body;
-  await pool.query(
-    "UPDATE payments SET status = 'approved', licensekey = $1 WHERE opcode = $2",
-    [licensekey, opcode]
-  );
-  res.json({ success: true });
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 OrgasmoNet Backend corriendo en puerto ${PORT}`);
+app.listen(process.env.PORT || 3000, () => {
+  console.log('🚀 OrgasmoNet Backend corriendo en puerto', process.env.PORT || 3000);
 });
