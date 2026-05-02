@@ -1,25 +1,23 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+console.log("DATABASE_URL exists:", !!process.env.DATABASE_URL);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-pool.on('connect', () => {
-  console.log('✅ Conectado a PostgreSQL');
-});
+pool.on('connect', () => console.log("✅ Conectado a PostgreSQL"));
+pool.on('error', (err) => console.error("❌ DB Error:", err.message));
 
-pool.on('error', (err) => {
-  console.error('❌ Error en la base de datos:', err);
-});
-
-// Crear tabla si no existe
+// Crear tabla
 async function initDB() {
   try {
     await pool.query(`
@@ -33,9 +31,9 @@ async function initDB() {
         date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    console.log("✅ Tabla 'payments' lista");
+    console.log("✅ Tabla payments lista");
   } catch (e) {
-    console.error("Error creando tabla:", e);
+    console.error("Error tabla:", e.message);
   }
 }
 initDB();
@@ -43,14 +41,12 @@ initDB();
 // Rutas
 app.post('/api/payment', async (req, res) => {
   const { opcode, username, product } = req.body;
-  if (!opcode || !username) return res.status(400).json({ success: false, error: "Faltan datos" });
-
   try {
-    const result = await pool.query(
-      'INSERT INTO payments (opcode, username, product, status) VALUES ($1, $2, $3, $4) RETURNING *',
+    const r = await pool.query(
+      'INSERT INTO payments (opcode, username, product, status) VALUES ($1,$2,$3,$4) RETURNING *',
       [opcode, username, product || 'General', 'pending']
     );
-    res.json({ success: true, data: result.rows[0] });
+    res.json({ success: true });
   } catch (e) {
     res.status(400).json({ success: false, error: e.message });
   }
@@ -67,5 +63,5 @@ app.get('/api/payments/pending', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 Backend corriendo en puerto ${PORT}`);
+  console.log(`🚀 Backend corriendo correctamente en puerto ${PORT}`);
 });
